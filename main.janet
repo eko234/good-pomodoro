@@ -10,6 +10,7 @@
    interruptions, etc``
    #TODO reconfigure pomodoro flag
    #TODO add hooks
+   #TODO make end be sensible too
    #TODO allow to parameterize sequences ie a pomodoro is a w|sb|w|sb|w|sb|w|lb sequence
    #TODO allow an option to define the path for storing files
    "work-duration" {:kind :option
@@ -40,21 +41,20 @@
            :required false
            :short "i"
            :help "create the default folder if not exists"}
-   "command" {:kind :accumulate
+   "command" {:kind :option
               :short "c"
-              :required true
+              :required false
               :default "show"
               :help ``
- command to run, one of (show|start|kill|pause|continue|skip)
+ command to run, one of (show|start|end|pause|continue|skip)
  show: prints to stdout the status of the selected task
  start: creates a new pomodoro if a given task is not a running pomodoro
- kill: stops a running pomodoro and stores its data into the vault
+ end: stops a running pomodoro and stores its data into the vault
  pause: pauses a pomodoro
  continue: resumes a paused pomodoro
  skip: skip to next segment
               ``}
    :default {:kind :accumulate}])
-
 
 
 (defn make-model [options time]
@@ -64,23 +64,45 @@
   @{:type event :time time})
 
 (defn pomodoro-save-model [task model]
+  (pp :saving)
+  (pp (string (dyn :tomato-folder) "/" task))
   (spit (string (dyn :tomato-folder) "/" task) (marshal model)))
 
 (defn pomodoro-read-model [task]
   (unmarshal (slurp (string (dyn :tomato-folder) "/" task))))
 
+(defn task-exist? [task]
+  (find |(= task $) (os/dir (dyn :tomato-folder))))
+
 (defn pomodoro-start [task options]
+  (assert (not (task-exist? task)) "task already exists")
   (pomodoro-save-model task (make-model options (os/time))))
 
-(defn pomodoro-kill [task])
+(defn pomodoro-end [task]
+  "sets a final timestamp to podoro and moves it away")
 
-(defn pomodoro-show [task])
+(defn pomodoro-is-paused? [model])
+
+(defn pomodoro-segment [time model]
+  [12 "hello"])
+
+(defn pomodoro-pretty [task model]
+  (let
+    [now (os/time)
+     status (if (pomodoro-is-paused? model) "paused" "going")
+     [segment left] (pomodoro-segment now model)]
+    (string/format "task: %s | status: %s | segment: %s | left: %s" task status segment left)))
+
+(defn pomodoro-show [task]
+  (let
+    [model (pomodoro-read-model task)]
+    (pomodoro-pretty task model)))
 
 (defn pomodoro-save-event [task event]
   (let [model (pomodoro-read-model task)
         event-buffer (model :event-buffer)
         new-event (make-event event (os/time))]
-    (array/push new-event)
+    (array/push event-buffer new-event)
     (pomodoro-save-model task model)))
 
 (defn good-pomodoro
@@ -88,31 +110,22 @@
   (match cmd
     "show" (pomodoro-show task)
     "start" (pomodoro-start task options)
-    "kill" (pomodoro-kill task)
+    "end" (pomodoro-end task)
     "pause" (pomodoro-save-event task :pause)
     "continue" (pomodoro-save-event task :continue)
     "skip" (pomodoro-save-event task :skip)))
 
 (defn main [& _]
-  (setdyn :tomato-folder "~/.good-pomodoro")
+  (setdyn :tomato-folder (string (get (os/environ) "HOME") "/.good-pomodoro"))
   (let [{"long-break-duration" long-break-duration
          "short-break-duration" short-break-duration
          "work-duration" work-duration
          "intervals" intervals
-         "init" init
+         "init" init #TODO find a sensible way to initialize this shit
          "task" task
          "command" command} (argparse ;argparse-params)
         options {:long-break-duration long-break-duration
                  :short-break-duration short-break-duration
                  :work-duration work-duration
                  :intervals intervals}]
-    (when init
-      (os/mkdir (dyn :tomato-folder)))
-    (pp (good-pomodoro command task options))))
-
-# @["nigger"]
-# nil
-# ()
-# {:long-break-duration 30 :short-break-duration 5 :work-duration 25}
-# nil
-
+    (print (good-pomodoro command task options))))
