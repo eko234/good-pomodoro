@@ -56,7 +56,6 @@
               ``}
    :default {:kind :accumulate}])
 
-
 (defn make-model [options time]
   @{:origin time :options options :event-buffer @[]})
 
@@ -64,8 +63,6 @@
   @{:type event :time time})
 
 (defn pomodoro-save-model [task model]
-  (pp :saving)
-  (pp (string (dyn :tomato-folder) "/" task))
   (spit (string (dyn :tomato-folder) "/" task) (marshal model)))
 
 (defn pomodoro-read-model [task]
@@ -84,14 +81,14 @@
 (defn pomodoro-is-paused? [model])
 
 (defn pomodoro-segment [time model]
-  [12 "hello"])
+  ["12" "hello"])
 
 (defn pomodoro-pretty [task model]
   (let
     [now (os/time)
-     status (if (pomodoro-is-paused? model) "paused" "going")
+     format-string (if (pomodoro-is-paused? model) "on %s | %s : %s paused" "on %s | %s : %s")
      [segment left] (pomodoro-segment now model)]
-    (string/format "task: %s | status: %s | segment: %s | left: %s" task status segment left)))
+    (string/format format-string task segment left)))
 
 (defn pomodoro-show [task]
   (let
@@ -128,4 +125,8 @@
                  :short-break-duration short-break-duration
                  :work-duration work-duration
                  :intervals intervals}]
-    (print (good-pomodoro command task options))))
+    (if init 
+      (do 
+        (os/mkdir (dyn :tomato-folder))
+        (print "napolitan folder cooked"))
+      (print (good-pomodoro command task options)))))
