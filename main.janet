@@ -15,17 +15,17 @@
    "work-duration" {:kind :option
                     :required false
                     :short "w"
-                    :default 25
+                    :default 1500
                     :help "duh"}
    "short-break-duration" {:kind :option
                            :required false
                            :short "b"
-                           :default 5
+                           :default 300
                            :help "really?"}
    "long-break-duration" {:kind :option
                           :required false
                           :short "B"
-                          :default 30
+                          :default 1800
                           :help "sweet long breaks"}
    "task" {:kind :option
            :required false
@@ -51,8 +51,7 @@
  end: stops a running pomodoro and stores its data into the vault
  pause: pauses a pomodoro
  continue: resumes a paused pomodoro
- skip: skip to next segment
-              ``}
+ skip: skip to next segment``}
    :default {:kind :accumulate}])
 
 (defn make-model [options time]
@@ -79,15 +78,46 @@
 
 (defn pomodoro-is-paused? [model])
 
-(defn pomodoro-segment [time model]
-  ["12" "hello"])
+(defn substract-intervals [])
+
+(defn shift-segmants [segments]
+  [;(drop 1 segments) (get segments 0)])
+
+(defn pomodoro-segment [now model]
+  (let
+    [{:origin origin
+      :options {:long-break-duration long-break-duration
+                :short-break-duration short-break-duration
+                :work-duration work-duration}} model]
+    (var car (- now origin))
+    # TODO check for arity of segments
+    (var segments [["work" work-duration]
+                   ["short-break" short-break-duration]
+                   ["work" work-duration]
+                   ["short-break" short-break-duration]
+                   ["work" work-duration]
+                   ["long-break" long-break-duration]])
+    (def segments-length (length segments))
+    (label result
+      (forever
+        (def next-car (- car (last (first segments))))
+        (if (<= next-car 0)
+          (return result [(first (first segments)) next-car])
+          (do
+            (set segments (shift-segmants segments))
+            (set car next-car)))))))
+
+(defn format-time [time]
+  (let [{:minutes minutes
+         :seconds seconds} (os/date time)]
+    (string/format "%d:%d" minutes seconds)))
 
 (defn pomodoro-pretty [task model]
   (let
     [now (os/time)
      format-string (if (pomodoro-is-paused? model) "on %s | %s : %s paused" "on %s | %s : %s")
      [segment left] (pomodoro-segment now model)]
-    (string/format format-string task segment left)))
+    (string/format format-string task segment (format-time (math/abs left)))))
 
 (defn pomodoro-show [task]
   (let
