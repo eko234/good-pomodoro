@@ -1,5 +1,4 @@
 (import argparse :prefix "")
-(import spork/rpc)
 
 (def argparse-params
   [``Good-Pomodoro is a cli program to define simple pomodoro
@@ -125,8 +124,8 @@
                  :short-break-duration short-break-duration
                  :work-duration work-duration
                  :intervals intervals}]
-    (if init 
-      (do 
+    (if init
+      (do
         (os/mkdir (dyn :tomato-folder))
         (print "napolitan folder cooked"))
       (print (good-pomodoro command task options)))))
