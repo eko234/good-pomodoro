@@ -55,7 +55,10 @@
    :default {:kind :accumulate}])
 
 (defn make-model [options time]
-  @{:origin time :options options :event-buffer @[]})
+  @{:origin time
+    :options options
+    :event-buffer @[]
+    :king-crimson 0})
 
 (defn make-event [event time]
   @{:type event :time time})
@@ -69,27 +72,42 @@
 (defn task-exist? [task]
   (find |(= task $) (os/dir (dyn :tomato-folder))))
 
-(defn pomodoro-start [task options]
+(defn pomodoro-start [task options time]
   (assert (not (task-exist? task)) "task already exists")
-  (pomodoro-save-model task (make-model options (os/time))))
+  (pomodoro-save-model task (make-model options time)))
 
-(defn pomodoro-end [task]
+(defn pomodoro-end [task time]
   "sets a final timestamp to podoro and moves it away")
 
-(defn pomodoro-is-paused? [model])
+
+(defn consec
+  "takes a binary function and an array and return
+  consecutive elements as defined by the provided function"
+  [f a]
+  (reduce |(if (f $0 $1) $0 [;$0 $1]) [] a))
+
+(defn pomodoro-is-paused? [pauses continues]
+  (label result
+    (do
+      (when (or (empty? pauses)
+                (and (empty? pauses)
+                     (empty? continues)))
+        (return result false))
+      (> (get (last pauses) :time -1)
+         (get (last continues) :time -2)))))
 
 (defn substract-intervals [])
 
 (defn shift-segmants [segments]
   [;(drop 1 segments) (get segments 0)])
 
-(defn pomodoro-segment [now model]
+(defn pomodoro-segment [computed-time model]
   (let
     [{:origin origin
       :options {:long-break-duration long-break-duration
                 :short-break-duration short-break-duration
                 :work-duration work-duration}} model]
-    (var car (- now origin))
+    (var car (- computed-time origin))
     # TODO check for arity of segments
     (var segments [["work" work-duration]
                    ["short-break" short-break-duration]
@@ -110,36 +128,64 @@
 (defn format-time [time]
   (let [{:minutes minutes
          :seconds seconds} (os/date time)]
-    (string/format "%d:%d" minutes seconds)))
+    (if (= (length (string seconds)) 1)
+      (string/format "%d:0%d" minutes seconds)
+      (string/format "%d:%d" minutes seconds))))
 
-(defn pomodoro-pretty [task model]
+(defn pomodoro-pretty [task model computed-time] 
   (let
-    [now (os/time)
-     format-string (if (pomodoro-is-paused? model) "on %s | %s : %s paused" "on %s | %s : %s")
-     [segment left] (pomodoro-segment now model)]
-    (string/format format-string task segment (format-time (math/abs left)))))
+    [events (model :event-buffer)
+     consecutive-events-by-type (consec |(= (get (last $0) :type) ($1 :type)) events)
+     events-by-type (group-by |($ :type) consecutive-events-by-type)
+     pauses (get events-by-type :pause [])
+     continues (get events-by-type :continue [])
+     paused? (pomodoro-is-paused? pauses continues)
+     origin (model :origin)
+     format-string (if paused?
+                     " %s %s ■ "
+                     " %s %s ▲ ")
+     [segment left] (pomodoro-segment computed-time model)]
+    (string/format format-string segment (format-time (math/abs left)))))
 
-(defn pomodoro-show [task]
+(defn pomodoro-show [task time]
   (let
-    [model (pomodoro-read-model task)]
-    (pomodoro-pretty task model)))
+    [model (pomodoro-read-model task)
+     king-crimson (model :king-crimson)
+     computed-time (- time king-crimson)]
+    (pomodoro-pretty task model computed-time)))
 
-(defn pomodoro-save-event [task event]
-  (let [model (pomodoro-read-model task)
-        event-buffer (model :event-buffer)
-        new-event (make-event event (os/time))]
+(defn pomodoro-save-event [task event time]
+  (let
+    [model (pomodoro-read-model task)
+     event-buffer (model :event-buffer)
+     king-crimson (model :king-crimson)
+     computed-time (- time king-crimson)
+     last-event (last event-buffer)
+     new-event (make-event event computed-time)]
     (array/push event-buffer new-event)
+    (if-let
+      [exist last-event
+       last-event-type (last-event :type)
+       is-pause (= last-event-type :pause)
+       is-continue (= event :continue)
+       time-difference (- computed-time (last-event :time))]
+      (put model :king-crimson (+ king-crimson time-difference)))
     (pomodoro-save-model task model)))
 
+
+(comment if there is a pause before and this is a continue ,increase king crimson
+         by substracting the time from the pause with current time ,king crimson
+         will be used to substract from current time from now on)
+
 (defn good-pomodoro
-  [cmd task options]
+  [cmd task options time]
   (match cmd
-    "show" (pomodoro-show task)
-    "start" (pomodoro-start task options)
-    "end" (pomodoro-end task)
-    "pause" (pomodoro-save-event task :pause)
-    "continue" (pomodoro-save-event task :continue)
-    "skip" (pomodoro-save-event task :skip)))
+    "show" (pomodoro-show task time)
+    "start" (pomodoro-start task options time)
+    "end" (pomodoro-end task time)
+    "pause" (pomodoro-save-event task :pause time)
+    "continue" (pomodoro-save-event task :continue time)
+    "skip" (pomodoro-save-event task :skip time)))
 
 (defn main [& _]
   (setdyn :tomato-folder (string (get (os/environ) "HOME") "/.good-pomodoro"))
@@ -158,4 +204,22 @@
       (do
         (os/mkdir (dyn :tomato-folder))
         (print "napolitan folder cooked"))
-      (print (good-pomodoro command task options)))))
+      (print (good-pomodoro command task options (os/time))))))
+
+# cambiar origen por la ultima pause
+
+
+now =>
+on pause
+on continue
+
+
+
+
+
+now
+pause
+continue
+
+
+
