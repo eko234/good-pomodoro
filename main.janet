@@ -5,221 +5,130 @@
    work stuff things, internally a pomodoro is just a file with
    that represents a struct with a timestamp field to trak when
    the pomodoro started, an options field to parameterize times
-   and intervals and an event buffer to store, pauses, skips,
+   and a buffer to store pauses, skips,
    interruptions, etc``
-   #TODO reconfigure pomodoro flag
-   #TODO add hooks
-   #TODO make end be sensible too
-   #TODO allow to parameterize sequences ie a pomodoro is a w|sb|w|sb|w|sb|w|lb sequence
-   #TODO allow an option to define the path for storing files
-   "work-duration" {:kind :option
-                    :required false
-                    :short "w"
-                    :default 1500
-                    :help "duh"}
-   "short-break-duration" {:kind :option
-                           :required false
-                           :short "b"
-                           :default 300
-                           :help "really?"}
-   "long-break-duration" {:kind :option
-                          :required false
-                          :short "B"
-                          :default 1800
-                          :help "sweet long breaks"}
-   "task" {:kind :option
-           :required false
-           :short "t"
-           :default "main"
-           :help "name of the task, defaults to main"}
-   "intervals" {:kind :option
-                :required false
-                :short "I"
-                :help "sequential string representing work/break intervals in minutes"}
-   "init" {:kind :flag
-           :required false
-           :short "i"
-           :help "create the default folder if not exists"}
-   "command" {:kind :option
-              :short "c"
-              :required false
-              :default "show"
-              :help ``
+   "work-duration"
+   {:kind :option
+    :required false
+    :short "w"
+    :default 1500
+    :help "duh"}
+
+   "short-break-duration"
+   {:kind :option
+    :required false
+    :short "b"
+    :default 300
+    :help "really?"}
+
+   "long-break-duration"
+   {:kind :option
+    :required false
+    :short "B"
+    :default 1800
+    :help "sweet long breaks"}
+
+   "init"
+   {:kind :flag
+    :required false
+    :short "i"
+    :help "create the default folder if not exists"}
+
+   "command"
+   {:kind :option
+    :short "c"
+    :required false
+    :default "show"
+    :help ``
  command to run, one of (show|start|end|pause|continue|skip)
- show: prints to stdout the status of the selected task
- start: creates a new pomodoro if a given task is not a running pomodoro
+ show: prints to stdout the status 
+ start: creates a new pomodoro 
  end: stops a running pomodoro and stores its data into the vault
  pause: pauses a pomodoro
  continue: resumes a paused pomodoro
  skip: skip to next segment``}
-   :default {:kind :accumulate}])
 
-(defn make-model [options time]
-  @{:origin time
-    :options options
-    :event-buffer @[]
-    :king-crimson 0})
+   :default
+   {:kind :accumulate}])
 
-(defn make-event [event time]
-  @{:type event :time time})
+(defn make-model [options]
+  {:options options
+   :buffer @[]})
 
-(defn pomodoro-save-model [task model]
-  (spit (string (dyn :tomato-folder) "/" task) (marshal model)))
-
-(defn pomodoro-read-model [task]
-  (unmarshal (slurp (string (dyn :tomato-folder) "/" task))))
-
-(defn task-exist? [task]
-  (find |(= task $) (os/dir (dyn :tomato-folder))))
-
-(defn pomodoro-start [task options time]
-  (assert (not (task-exist? task)) "task already exists")
-  (pomodoro-save-model task (make-model options time)))
-
-(defn pomodoro-end [task time]
-  "sets a final timestamp to podoro and moves it away")
-
-
-(defn consec
-  "takes a binary function and an array and return
-  consecutive elements as defined by the provided function"
-  [f a]
-  (reduce |(if (f $0 $1) $0 [;$0 $1]) [] a))
-
-(defn pomodoro-is-paused? [pauses continues]
-  (label result
-    (do
-      (when (or (empty? pauses)
-                (and (empty? pauses)
-                     (empty? continues)))
-        (return result false))
-      (> (get (last pauses) :time -1)
-         (get (last continues) :time -2)))))
-
-(defn substract-intervals [])
-
-(defn shift-segmants [segments]
-  [;(drop 1 segments) (get segments 0)])
-
-(defn pomodoro-segment [computed-time model]
+(defn format-pomodoro [model time]
   (let
-    [{:origin origin
-      :options {:long-break-duration long-break-duration
-                :short-break-duration short-break-duration
-                :work-duration work-duration}} model]
-    (var car (- computed-time origin))
-    # TODO check for arity of segments
-    (var segments [["work" work-duration]
-                   ["short-break" short-break-duration]
-                   ["work" work-duration]
-                   ["short-break" short-break-duration]
-                   ["work" work-duration]
-                   ["long-break" long-break-duration]])
-    (def segments-length (length segments))
-    (label result
-      (forever
-        (def next-car (- car (last (first segments))))
-        (if (<= next-car 0)
-          (return result [(first (first segments)) next-car])
-          (do
-            (set segments (shift-segmants segments))
-            (set car next-car)))))))
+    [{:long-break-duration long-break-duration
+      :short-break-duration short-break-duration
+      :work-duration work-duration} (get model :options)
+     buffer (get model :buffer)
+     intervals [work-duration
+                short-break-duration
+                work-duration
+                short-break-duration
+                long-break-duration]]
+    (var current-segment 0)
+    (var time-elapsed 0)
+    (loop [event :in buffer]
+      )
+    maybe use a reduce function?))
 
-(defn format-time [time]
-  (let [{:minutes minutes
-         :seconds seconds} (os/date time)]
-    (if (= (length (string seconds)) 1)
-      (string/format "%d:0%d" minutes seconds)
-      (string/format "%d:%d" minutes seconds))))
-
-(defn pomodoro-pretty [task model computed-time] 
+(defn show-pomodoro [time]
   (let
-    [events (model :event-buffer)
-     consecutive-events-by-type (consec |(= (get (last $0) :type) ($1 :type)) events)
-     events-by-type (group-by |($ :type) consecutive-events-by-type)
-     pauses (get events-by-type :pause [])
-     continues (get events-by-type :continue [])
-     paused? (pomodoro-is-paused? pauses continues)
-     origin (model :origin)
-     format-string (if paused?
-                     " %s %s ■ "
-                     " %s %s ▲ ")
-     [segment left] (pomodoro-segment computed-time model)]
-    (string/format format-string segment (format-time (math/abs left)))))
+    [model (load-model)]
+    (format-pomodoro model time)))
 
-(defn pomodoro-show [task time]
+(defn start-pomodoro [options time]
   (let
-    [model (pomodoro-read-model task)
-     king-crimson (model :king-crimson)
-     computed-time (- time king-crimson)]
-    (pomodoro-pretty task model computed-time)))
+    [model (make-model options)]
+    (array/push (get model :buffer) {:type :play :time time})
+    (save-model model)))
 
-(defn pomodoro-save-event [task event time]
+(defn stop-pomodoro [time]
   (let
-    [model (pomodoro-read-model task)
-     event-buffer (model :event-buffer)
-     king-crimson (model :king-crimson)
-     computed-time (- time king-crimson)
-     last-event (last event-buffer)
-     new-event (make-event event computed-time)]
-    (array/push event-buffer new-event)
-    (if-let
-      [exist last-event
-       last-event-type (last-event :type)
-       is-pause (= last-event-type :pause)
-       is-continue (= event :continue)
-       time-difference (- computed-time (last-event :time))]
-      (put model :king-crimson (+ king-crimson time-difference)))
-    (pomodoro-save-model task model)))
+    [model (load-model)]
+    (array/push (get model :buffer) {:type :stop :time time})
+    (save-model model)))
 
+(defn skip-pomodoro [time]
+  (let
+    [model (load-model)]
+    (array/push (get model :buffer) {:type :skip :time time})
+    (save-model model)))
 
-(comment if there is a pause before and this is a continue ,increase king crimson
-         by substracting the time from the pause with current time ,king crimson
-         will be used to substract from current time from now on)
+(defn play-pomodoro [time]
+  (let
+    [model (load-model)]
+    (array/push (get model :buffer) {:type :play :time time})
+    (save-model model)))
 
-(defn good-pomodoro
-  [cmd task options time]
-  (match cmd
-    "show" (pomodoro-show task time)
-    "start" (pomodoro-start task options time)
-    "end" (pomodoro-end task time)
-    "pause" (pomodoro-save-event task :pause time)
-    "continue" (pomodoro-save-event task :continue time)
-    "skip" (pomodoro-save-event task :skip time)))
+(defn end-pomodoro [time]
+  (let
+    [model (load-model)]
+    (array/push (get model :buffer) {:type :stop :time time})
+    (save-model model)
+    (archive-model)))
+
+(defn good-pomodoro [command options time]
+  (case command
+    "show" (show-pomodoro time)
+    "start" (start-pomodoro options time)
+    "play" (play-pomodoro options time)
+    "stop" (stop-pomodoro time)
+    "skip" (skip-pomodoro time)
+    "end" (end-pomodoro time)))
 
 (defn main [& _]
   (setdyn :tomato-folder (string (get (os/environ) "HOME") "/.good-pomodoro"))
   (let [{"long-break-duration" long-break-duration
          "short-break-duration" short-break-duration
          "work-duration" work-duration
-         "intervals" intervals
          "init" init #TODO find a sensible way to initialize this shit
-         "task" task
          "command" command} (argparse ;argparse-params)
         options {:long-break-duration long-break-duration
                  :short-break-duration short-break-duration
-                 :work-duration work-duration
-                 :intervals intervals}]
+                 :work-duration work-duration}]
     (if init
       (do
         (os/mkdir (dyn :tomato-folder))
         (print "napolitan folder cooked"))
-      (print (good-pomodoro command task options (os/time))))))
-
-# cambiar origen por la ultima pause
-
-
-now =>
-on pause
-on continue
-
-
-
-
-
-now
-pause
-continue
-
-
-
+      (print (good-pomodoro command options (os/time))))))
